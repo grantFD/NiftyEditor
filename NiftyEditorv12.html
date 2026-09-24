@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimpleTex Editor</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: Canvas;
+    --fg: CanvasText;
+    --panel: color-mix(in srgb, Canvas 92%, CanvasText 8%);
+    --border: color-mix(in srgb, CanvasText 22%, transparent);
+    --button: color-mix(in srgb, Canvas 84%, CanvasText 16%);
+    --button-hover: color-mix(in srgb, Canvas 76%, CanvasText 24%);
+    --button-active: color-mix(in srgb, Canvas 65%, CanvasText 35%);
+    --accent: Highlight;
+    --accent-text: HighlightText;
+    --muted: color-mix(in srgb, CanvasText 60%, transparent);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+
+  .toolbar {
+    min-height: 54px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    gap: 12px;
+  }
+
+  .toolbar-left, .toolbar-center, .toolbar-right {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+  }
+
+  .toolbar-left { justify-content: flex-start; gap: 8px; }
+  .toolbar-center { justify-content: center; min-width: 160px; }
+  .toolbar-right { justify-content: flex-end; }
+
+  .toolbar button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--button);
+    color: var(--fg);
+    border-radius: 7px;
+    padding: 7px 12px;
+    min-height: 36px;
+    cursor: pointer;
+    font: inherit;
+    white-space: nowrap;
+    transition: background 0.1s, box-shadow 0.1s;
+  }
+
+  .toolbar button:hover { background: var(--button-hover); }
+  
+  .toolbar button.active {
+    background: var(--button-active);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.3);
+    border-color: color-mix(in srgb, var(--border) 80%, black 20%);
+  }
+
+  .toolbar button:focus-visible,
+  .filename:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* File Menu Dropdown */
+  .dropdown {
+    position: relative;
+  }
+  .dropdown-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    min-width: 260px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+  }
+  .dropdown-content.hidden { display: none; }
+  .file-info {
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .file-info strong { color: var(--fg); font-weight: 600; }
+  .dropdown-content hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 6px 0;
+    width: 100%;
+  }
+  .dropdown-content button {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    text-align: left;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--fg);
+    min-height: auto;
+    box-shadow: none;
+  }
+  .dropdown-content button:hover { background: var(--button-hover); }
+  .shortcut { color: var(--muted); font-size: 11px; }
+
+  .filename {
+    width: 100%;
+    max-width: 300px;
+    text-align: center;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font: 600 14px/1.2 system-ui, sans-serif;
+  }
+
+  .filename:hover,
+  .filename:focus {
+    border-color: var(--border);
+    background: var(--bg);
+  }
+
+  .status-msg {
+    color: var(--fg);
+    font: inherit;
+    white-space: nowrap;
+    padding-right: 6px;
+  }
+
+  #fallbackBadge {
+    display: none;
+    font-weight: 700;
+    margin-right: 12px;
+    color: var(--muted);
+  }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+
+  textarea {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    border: 0;
+    padding: 18px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    tab-size: 5;
+  }
+
+  dialog {
+    width: min(480px, calc(100vw - 28px));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: 0 18px 60px rgba(0,0,0,.28);
+  }
+
+  dialog::backdrop {
+    background: rgba(0,0,0,.45);
+  }
+
+  .modal-body { padding: 22px; }
+  .modal-body h2 { margin: 0 0 10px; font-size: 19px; }
+  .modal-body p { margin: 0; color: var(--muted); white-space: pre-line; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .modal-actions button {
+    border: 1px solid var(--border);
+    background: var(--button);
+    color: var(--fg);
+    padding: 8px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .modal-actions .primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: transparent;
+  }
+
+  #fallbackInput { display: none; }
+
+  @media (max-width: 650px) {
+    .toolbar { flex-wrap: wrap; }
+    .toolbar-center { order: 3; flex-basis: 100%; margin-top: 8px; }
+    textarea { padding: 12px; font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <div class="dropdown">
+        <button id="fileMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">File ▾</button>
+        <div id="fileMenu" class="dropdown-content hidden" role="menu">
+          <div class="file-info">
+            <div>File: <strong id="infoName">notsaved</strong></div>
+            <div>Location: <strong id="infoLoc">App location</strong></div>
+            <div>Modified: <strong id="infoMod">Never</strong></div>
+          </div>
+          <hr>
+          <button id="menuNew" type="button" role="menuitem">New <span class="shortcut">Ctrl+N</span></button>
+          <button id="menuOpen" type="button" role="menuitem">Open <span class="shortcut">Ctrl+O</span></button>
+          <button id="menuSave" type="button" role="menuitem">Save <span class="shortcut">Ctrl+S</span></button>
+          <button id="menuSaveAs" type="button" role="menuitem">Save As <span class="shortcut">Ctrl+Shift+S</span></button>
+          <button id="menuDir" type="button" role="menuitem">Set Working Directory</button>
+          <button id="menuWordCount" type="button" role="menuitem">Count words</button>
+        </div>
+      </div>
+      <button id="moveBtn" type="button" title="Select and Move Mode (Ctrl+/)">Move Mode</button>
+      <button id="copyAllBtn" type="button" title="Copy all text to clipboard (Ctrl+A)">Copy All</button>
+    </div>
+
+    <div class="toolbar-center">
+      <input id="filename" class="filename" value="notsaved" aria-label="Filename">
+    </div>
+
+    <div class="toolbar-right">
+      <span id="fallbackBadge">Fallback</span>
+      <span id="msgArea" class="status-msg" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <main>
+    <textarea id="editor" spellcheck="false" aria-label="Text editor"></textarea>
+  </main>
+
+  <input id="fallbackInput" type="file" accept=".txt,text/plain">
+
+  <dialog id="modal">
+    <div class="modal-body">
+      <h2 id="modalTitle">Warning</h2>
+      <p id="modalMessage"></p>
+    </div>
+    <div class="modal-actions" id="modalActions"></div>
+  </dialog>
+
+<script>
+(() => {
+  "use strict";
+
+  const editor = document.getElementById("editor");
+  const filenameInput = document.getElementById("filename");
+  const fallbackBadge = document.getElementById("fallbackBadge");
+  const fallbackInput = document.getElementById("fallbackInput");
+  const msgArea = document.getElementById("msgArea");
+  const moveBtn = document.getElementById("moveBtn");
+  
+  let msgTimer = null;
+
+  const hasFSAccess = "showOpenFilePicker" in window && "showSaveFilePicker" in window;
+
+  let dirty = false;
+  let currentFileHandle = null;
+  let workingDirectoryHandle = null;
+  let fallbackOpenedFile = null;
+  let fallbackBadgeTimer = null;
+  let lastModifiedTime = null;
+
+  // -------- Undo Stack (2-Step Deletes Only) --------
+  let deleteUndoStack = [];
+  let isDeleting = false;
+  let deleteTimer = null;
+
+  function pushDeleteState() {
+    const state = { val: editor.value, start: editor.selectionStart, end: editor.selectionEnd };
+    if (deleteUndoStack.length > 0 && deleteUndoStack[deleteUndoStack.length - 1].val === state.val) return;
+    deleteUndoStack.push(state);
+    if (deleteUndoStack.length > 2) deleteUndoStack.shift();
+  }
+
+  function performDeleteUndo() {
+    if (deleteUndoStack.length > 0) {
+      const state = deleteUndoStack.pop();
+      editor.value = state.val;
+      editor.setSelectionRange(state.start, state.end);
+      setDirty(true);
+    }
+  }
+
+  // Hook into input events to capture state right before deletions occur
+  editor.addEventListener("beforeinput", (e) => {
+    // If the input represents a deletion, or if text is currently highlighted (meaning typing will replace/delete it)
+    if (e.inputType.includes("delete") || editor.selectionStart !== editor.selectionEnd) {
+      if (!isDeleting) {
+        pushDeleteState();
+        isDeleting = true;
+      }
+      // Group rapid consecutive backspaces so they don't instantly overwrite both undo steps
+      clearTimeout(deleteTimer);
+      deleteTimer = setTimeout(() => { isDeleting = false; }, 600);
+    }
+  });
+
+  // -------- Audio Feedback --------
+  function playGentleBeep() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = 350; // Gentle frequency
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {
+      // Audio fallback silently caught
+    }
+  }
+
+  // -------- Messages --------
+  function showMessage(msg, duration = 3000) {
+    msgArea.textContent = msg;
+    clearTimeout(msgTimer);
+    if (duration > 0) {
+      msgTimer = setTimeout(() => {
+        msgArea.textContent = selectedBlock ? "move mode" : "";
+      }, duration);
+    }
+  }
+
+  // -------- IndexedDB: persist directory handle --------
+  const DB_NAME = "filetester-editor";
+  const STORE = "settings";
+  const DIR_KEY = "workingDirectoryHandle";
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(STORE)) {
+          req.result.createObjectStore(STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbGet(key) {
+    try {
+      const db = await openDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readonly");
+        const req = tx.objectStore(STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function idbSet(key, value) {
+    try {
+      const db = await openDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).put(value, key);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch {}
+  }
+
+  // -------- UI helpers --------
+  function displayName() {
+    const base = (filenameInput.value || "notsaved").replace(/\*+$/, "").trim() || "notsaved";
+    return dirty ? base + "*" : base;
+  }
+
+  function renderFilename() {
+    const base = (filenameInput.dataset.baseName || filenameInput.value || "notsaved")
+      .replace(/\*+$/, "").trim() || "notsaved";
+    filenameInput.dataset.baseName = base;
+    filenameInput.value = dirty ? base + "*" : base;
+    document.title = `${dirty ? "*" : ""}${base} — SimpleTex Editor`;
+  }
+
+  function setFilename(name) {
+    filenameInput.dataset.baseName = (name || "notsaved").replace(/\*+$/, "").trim() || "notsaved";
+    renderFilename();
+  }
+
+  function getFilename() {
+    return (filenameInput.dataset.baseName || filenameInput.value || "notsaved")
+      .replace(/\*+$/, "").trim() || "notsaved";
+  }
+
+  function setDirty(value) {
+    dirty = !!value;
+    renderFilename();
+  }
+
+  function formatTime(date) {
+    if (!date) return "Never";
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  }
+
+  function updateFileInfo() {
+    document.getElementById("infoName").textContent = displayName();
+    document.getElementById("infoLoc").textContent = workingDirectoryHandle ? workingDirectoryHandle.name : (hasFSAccess ? "App location" : "Browser-managed");
+    document.getElementById("infoMod").textContent = formatTime(lastModifiedTime);
+  }
+
+  function flashFallback() {
+    if (hasFSAccess) return;
+    fallbackBadge.style.display = "inline";
+    clearTimeout(fallbackBadgeTimer);
+    fallbackBadgeTimer = setTimeout(() => {
+      fallbackBadge.style.display = "none";
+    }, 2600);
+  }
+
+  function modal(title, message, buttons) {
+    return new Promise(resolve => {
+      const dlg = document.getElementById("modal");
+      const titleEl = document.getElementById("modalTitle");
+      const msgEl = document.getElementById("modalMessage");
+      const actions = document.getElementById("modalActions");
+
+      titleEl.textContent = title;
+      msgEl.textContent = message;
+      actions.replaceChildren();
+
+      for (const button of buttons) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = button.label;
+        if (button.primary) btn.classList.add("primary");
+        btn.addEventListener("click", () => {
+          dlg.close();
+          resolve(button.value);
+        });
+        actions.appendChild(btn);
+      }
+
+      dlg.addEventListener("cancel", e => {
+        e.preventDefault();
+        dlg.close();
+        resolve("cancel");
+      }, { once: true });
+
+      dlg.showModal();
+    });
+  }
+
+  async function confirmDiscard(actionText) {
+    if (!dirty) return true;
+    const result = await modal(
+      "Unsaved changes",
+      `This file has unsaved changes. ${actionText} will discard them.`,
+      [
+        { label: "Cancel", value: "cancel" },
+        { label: "Discard changes", value: "discard", primary: true }
+      ]
+    );
+    return result === "discard";
+  }
+
+  async function showError(title, err) {
+    const detail = err && err.message ? err.message : String(err || "Unknown error");
+    await modal(title, detail, [{ label: "OK", value: "ok", primary: true }]);
+  }
+
+  // -------- Directory tracking --------
+  async function rememberDirectoryFromFileHandle(fileHandle) {
+    if (workingDirectoryHandle) await idbSet(DIR_KEY, workingDirectoryHandle);
+  }
+
+  async function restoreWorkingDirectory() {
+    if (!hasFSAccess) return;
+    const saved = await idbGet(DIR_KEY);
+    if (saved && saved.kind === "directory") {
+      workingDirectoryHandle = saved;
+    }
+  }
+
+  async function establishDirectoryIfPossible() {
+    if (!("showDirectoryPicker" in window)) return null;
+    try {
+      const dir = await window.showDirectoryPicker({
+        mode: "readwrite",
+        ...(workingDirectoryHandle ? { startIn: workingDirectoryHandle } : {})
+      });
+      workingDirectoryHandle = dir;
+      await idbSet(DIR_KEY, dir);
+      return dir;
+    } catch (err) {
+      if (err?.name === "AbortError") return null;
+      throw err;
+    }
+  }
+
+  // -------- File operations --------
+  async function newFile() {
+    if (!(await confirmDiscard("Creating a new file"))) return;
+    deleteUndoStack = []; // Reset undo on new file
+    editor.value = "";
+    currentFileHandle = null;
+    fallbackOpenedFile = null;
+    lastModifiedTime = null;
+    setFilename("notsaved");
+    setDirty(false);
+    showMessage("");
+    editor.focus();
+  }
+
+  async function openFile() {
+    if (!(await confirmDiscard("Opening another file"))) return;
+
+    if (hasFSAccess) {
+      try {
+        const opts = {
+          multiple: false,
+          types: [{
+            description: "Text files",
+            accept: { "text/plain": [".txt", ".text", ".log", ".md", ".csv"] }
+          }]
+        };
+        if (workingDirectoryHandle) opts.startIn = workingDirectoryHandle;
+
+        const [handle] = await window.showOpenFilePicker(opts);
+        const file = await handle.getFile();
+        deleteUndoStack = []; // Reset undo on file open
+        editor.value = await file.text();
+        currentFileHandle = handle;
+        fallbackOpenedFile = null;
+        lastModifiedTime = file.lastModified ? new Date(file.lastModified) : new Date();
+        setFilename(file.name);
+        setDirty(false);
+        showMessage("");
+        await rememberDirectoryFromFileHandle(handle);
+        editor.focus();
+      } catch (err) {
+        if (err?.name !== "AbortError") await showError("Could not open file", err);
+      }
+    } else {
+      flashFallback();
+      fallbackInput.value = "";
+      fallbackInput.click();
+    }
+  }
+
+  async function writeToHandle(handle) {
+    const writable = await handle.createWritable();
+    await writable.write(editor.value);
+    await writable.close();
+  }
+
+  async function saveFile() {
+    if (hasFSAccess) {
+      if (currentFileHandle) {
+        try {
+          const permission = await currentFileHandle.queryPermission({ mode: "readwrite" });
+          if (permission !== "granted") {
+            const requested = await currentFileHandle.requestPermission({ mode: "readwrite" });
+            if (requested !== "granted") throw new Error("Write permission was not granted.");
+          }
+          await writeToHandle(currentFileHandle);
+          setDirty(false);
+          lastModifiedTime = new Date();
+          showMessage("saved");
+          return;
+        } catch (err) {
+          await showError("Could not save file", err);
+          return;
+        }
+      }
+      await saveAsFile();
+      return;
+    }
+
+    flashFallback();
+    fallbackDownload(getFilename());
+    setDirty(false);
+    lastModifiedTime = new Date();
+    showMessage("saved");
+  }
+
+  async function saveAsFile() {
+    if (hasFSAccess) {
+      try {
+        const suggested = getFilename() === "notsaved" ? "untitled.txt" : getFilename();
+        const opts = {
+          suggestedName: suggested,
+          types: [{
+            description: "Text file",
+            accept: { "text/plain": [".txt"] }
+          }]
+        };
+        if (workingDirectoryHandle) opts.startIn = workingDirectoryHandle;
+
+        const handle = await window.showSaveFilePicker(opts);
+        await writeToHandle(handle);
+        currentFileHandle = handle;
+        fallbackOpenedFile = null;
+        setFilename(handle.name);
+        setDirty(false);
+        lastModifiedTime = new Date();
+        showMessage("saved");
+        await rememberDirectoryFromFileHandle(handle);
+      } catch (err) {
+        if (err?.name !== "AbortError") await showError("Could not save file", err);
+      }
+      return;
+    }
+
+    flashFallback();
+    let name = getFilename();
+    if (name === "notsaved") name = "untitled.txt";
+
+    const chosen = await modal(
+      "Save As",
+      `Fallback mode cannot show a native Save As filesystem picker.\nThe browser will download the file using the current filename: ${name}\n\nYou can edit the filename in the toolbar before saving.`,
+      [
+        { label: "Cancel", value: "cancel" },
+        { label: "Download", value: "save", primary: true }
+      ]
+    );
+    if (chosen !== "save") return;
+
+    fallbackDownload(name);
+    setFilename(name);
+    setDirty(false);
+    lastModifiedTime = new Date();
+    showMessage("saved");
+  }
+
+  function fallbackDownload(name) {
+    const safeName = (name || "untitled.txt").replace(/[\\/:*?"<>|]/g, "_");
+    const blob = new Blob([editor.value], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  fallbackInput.addEventListener("change", async () => {
+    const file = fallbackInput.files?.[0];
+    if (!file) return;
+    try {
+      deleteUndoStack = []; // Reset undo on file input
+      editor.value = await file.text();
+      fallbackOpenedFile = file;
+      currentFileHandle = null;
+      lastModifiedTime = file.lastModified ? new Date(file.lastModified) : new Date();
+      setFilename(file.name);
+      setDirty(false);
+      showMessage(""); 
+      editor.focus();
+    } catch (err) {
+      await showError("Could not open file", err);
+    }
+  });
+
+  // -------- Outline / indentation helpers --------
+  const INDENT = "\t";
+  let selectedBlock = null;
+
+  function lineStartAt(text, pos) {
+    const nl = text.lastIndexOf("\n", Math.max(0, pos - 1));
+    return nl + 1;
+  }
+
+  function getLineIndexAt(text, pos) {
+    return text.slice(0, pos).split("\n").length - 1;
+  }
+
+  function leadingIndentWidth(line) {
+    let width = 0;
+    for (const ch of line) {
+      if (ch === " ") width++;
+      else if (ch === "\t") width += 5;
+      else break;
+    }
+    return width;
+  }
+
+  function getBlockEnd(lines, lineIndex) {
+    const parentIndent = leadingIndentWidth(lines[lineIndex]);
+    let end = lineIndex + 1;
+    while (end < lines.length && leadingIndentWidth(lines[end]) > parentIndent) end++;
+    return end;
+  }
+
+  function indentCurrentLine(direction) {
+    const oldText = editor.value;
+    const oldStart = editor.selectionStart;
+    const oldEnd = editor.selectionEnd;
+    const lines = oldText.split("\n");
+    const startLine = getLineIndexAt(oldText, oldStart);
+
+    if (startLine < 0 || startLine >= lines.length) return;
+
+    let endLine = getLineIndexAt(oldText, oldEnd);
+    if (oldEnd > oldStart && oldText[oldEnd - 1] === "\n") {
+      endLine = Math.max(startLine, endLine - 1);
+    }
+
+    let blockEnd = (oldStart !== oldEnd) ? endLine + 1 : getBlockEnd(lines, startLine);
+    const changed = [];
+
+    for (let i = startLine; i < blockEnd; i++) {
+      if (direction === "in") {
+        lines[i] = INDENT + lines[i];
+        changed.push({ index: i, delta: 1 });
+      } else {
+        let delta = 0;
+        if (lines[i].startsWith("\t")) {
+          lines[i] = lines[i].slice(1);
+          delta = -1;
+        } else {
+          let remove = Math.min(5, (lines[i].match(/^ */) || [""])[0].length);
+          if (remove > 0) {
+            lines[i] = lines[i].slice(remove);
+            delta = -remove;
+          }
+        }
+        changed.push({ index: i, delta });
+      }
+    }
+
+    editor.value = lines.join("\n");
+
+    function findNewLineStart(index) {
+      let start = 0;
+      for (let i = 0; i < index; i++) start += lines[i].length + 1;
+      return start;
+    }
+
+    const mapPosition = (pos) => {
+      const idx = getLineIndexAt(oldText, pos);
+      if (idx < startLine) return pos;
+      if (idx >= blockEnd) {
+        const totalDelta = changed.reduce((sum, ch) => sum + ch.delta, 0);
+        return pos + totalDelta;
+      }
+      const oldLineStart = lineStartAt(oldText, pos);
+      const offset = pos - oldLineStart;
+      const delta = changed[idx - startLine].delta;
+      return findNewLineStart(idx) + Math.max(0, offset + delta);
+    };
+
+    editor.setSelectionRange(mapPosition(oldStart), mapPosition(oldEnd));
+    editor.focus();
+    setDirty(true);
+  }
+
+  function insertNewLineWithSameIndent() {
+    const text = editor.value;
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const currentLineStart = lineStartAt(text, start);
+    const linePrefix = text.slice(currentLineStart, start);
+    const match = linePrefix.match(/^[ \t]*/);
+    const indent = match ? match[0] : "";
+
+    editor.setRangeText("\n" + indent, start, end, "end");
+    editor.focus();
+    setDirty(true);
+  }
+
+  function selectParentBlock() {
+    const text = editor.value;
+    const caret = editor.selectionStart;
+    const lines = text.split("\n");
+    const lineIndex = getLineIndexAt(text, caret);
+    if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+    const blockEnd = getBlockEnd(lines, lineIndex);
+    const start = lines.slice(0, lineIndex).reduce((n, line) => n + line.length + 1, 0);
+    const end = lines.slice(0, blockEnd).reduce((n, line) => n + line.length + 1, 0);
+    const blockEndPosition = Math.max(start, end - (blockEnd > lineIndex ? 1 : 0));
+
+    selectedBlock = { start, end: blockEndPosition, caretBefore: caret };
+    editor.focus();
+    editor.setSelectionRange(start, blockEndPosition);
+  }
+
+  function clearSelectedBlock() {
+    if (!selectedBlock) return;
+    const caret = Math.min(selectedBlock.caretBefore, editor.value.length);
+    selectedBlock = null;
+    moveBtn.classList.remove("active");
+    editor.focus();
+    editor.setSelectionRange(caret, caret);
+  }
+
+  function notifyMoveFailed() {
+    playGentleBeep();
+    showMessage("Move not possible", 2000);
+  }
+
+  function toggleParentBlockSelection() {
+    if (selectedBlock) {
+      clearSelectedBlock();
+      showMessage("");
+    } else {
+      const text = editor.value;
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const lines = text.split("\n");
+      
+      // Verification constraints before moving mode is allowed
+      if (start === 0 && end === text.length && text.length > 0) {
+        notifyMoveFailed();
+        return;
+      }
+      
+      if (lines.length <= 1) {
+        notifyMoveFailed();
+        return;
+      }
+
+      const lineIndex = getLineIndexAt(text, start);
+      if (lines[lineIndex].trim() === "") {
+        notifyMoveFailed();
+        return;
+      }
+
+      selectParentBlock();
+      moveBtn.classList.add("active");
+      showMessage("move mode", 0); // Persistent message
+    }
+  }
+
+  function findSiblingBlock(lines, lineIndex, direction) {
+    if (direction === "up") {
+      if (lineIndex <= 0) return null;
+      const targetEnd = lineIndex;
+      let start = targetEnd - 1;
+      let currentMinIndent = leadingIndentWidth(lines[start]);
+
+      for (let i = start - 1; i >= 0; i--) {
+        const ind = leadingIndentWidth(lines[i]);
+        if (ind < currentMinIndent) {
+          if (getBlockEnd(lines, i) === targetEnd) {
+            start = i;
+            currentMinIndent = ind;
+          }
+        }
+      }
+      return { start, end: targetEnd };
+    }
+
+    const currentEnd = getBlockEnd(lines, lineIndex);
+    if (currentEnd >= lines.length) return null;
+    return { start: currentEnd, end: getBlockEnd(lines, currentEnd) };
+  }
+
+  function lineOffsets(lines) {
+    const offsets = new Array(lines.length);
+    let pos = 0;
+    for (let i = 0; i < lines.length; i++) {
+      offsets[i] = pos;
+      pos += lines[i].length + 1;
+    }
+    return offsets;
+  }
+
+  function moveSelectedBlock(direction) {
+    if (!selectedBlock) return false;
+
+    const text = editor.value;
+    const lines = text.split("\n");
+    const startLine = getLineIndexAt(text, selectedBlock.start);
+    const blockEndLine = getLineIndexAt(text, Math.max(selectedBlock.start, selectedBlock.end - 1));
+    const blockEnd = getBlockEnd(lines, startLine);
+
+    if (blockEndLine !== blockEnd - 1) {
+      selectedBlock = null;
+      moveBtn.classList.remove("active");
+      return false;
+    }
+
+    const sibling = findSiblingBlock(lines, startLine, direction);
+    if (!sibling) return true;
+
+    const offsets = lineOffsets(lines);
+    const blockStartPos = offsets[startLine];
+    const blockEndPos = offsets[blockEnd - 1] + lines[blockEnd - 1].length;
+
+    if (direction === "up") {
+      const siblingStartPos = offsets[sibling.start];
+      const siblingEndPos = offsets[sibling.end - 1] + lines[sibling.end - 1].length;
+      const siblingText = text.slice(siblingStartPos, siblingEndPos);
+      const blockText = text.slice(blockStartPos, blockEndPos);
+      const middleSeparator = text.slice(siblingEndPos, blockStartPos);
+
+      editor.value =
+        text.slice(0, siblingStartPos) +
+        blockText +
+        middleSeparator +
+        siblingText +
+        text.slice(blockEndPos);
+
+      const newStart = siblingStartPos;
+      const newEnd = newStart + blockText.length;
+      selectedBlock.start = newStart;
+      selectedBlock.end = newEnd;
+      selectedBlock.caretBefore = newStart;
+      editor.focus();
+      editor.setSelectionRange(newStart, newEnd);
+    } else {
+      const siblingStartPos = offsets[sibling.start];
+      const siblingEndPos = offsets[sibling.end - 1] + lines[sibling.end - 1].length;
+      const blockText = text.slice(blockStartPos, blockEndPos);
+      const siblingText = text.slice(siblingStartPos, siblingEndPos);
+      const middleSeparator = text.slice(blockEndPos, siblingStartPos);
+
+      editor.value =
+        text.slice(0, blockStartPos) +
+        siblingText +
+        middleSeparator +
+        blockText +
+        text.slice(siblingEndPos);
+
+      const newStart = blockStartPos + siblingText.length + middleSeparator.length;
+      const newEnd = newStart + blockText.length;
+      selectedBlock.start = newStart;
+      selectedBlock.end = newEnd;
+      selectedBlock.caretBefore = newStart;
+      editor.focus();
+      editor.setSelectionRange(newStart, newEnd);
+    }
+
+    setDirty(true);
+    return true;
+  }
+
+  async function copyAll() {
+    const oldStart = editor.selectionStart;
+    const oldEnd = editor.selectionEnd;
+    try {
+      await navigator.clipboard.writeText(editor.value);
+      showMessage("copied");
+    } catch {
+      const restoreStart = oldStart;
+      const restoreEnd = oldEnd;
+      editor.focus();
+      editor.select();
+      try {
+        if (!document.execCommand("copy")) throw new Error("Copy failed");
+        showMessage("copied");
+      } catch {}
+      editor.setSelectionRange(restoreStart, restoreEnd);
+    }
+  }
+
+  function countWords() {
+    const text = editor.value.trim();
+    const count = text ? text.split(/\s+/).length : 0;
+    showMessage(count + " words");
+  }
+
+  // -------- Dropdown Menu Logic --------
+  const fileMenuBtn = document.getElementById("fileMenuBtn");
+  const fileMenu = document.getElementById("fileMenu");
+
+  fileMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    fileMenu.classList.toggle("hidden");
+    const isExpanded = !fileMenu.classList.contains("hidden");
+    fileMenuBtn.setAttribute("aria-expanded", isExpanded);
+    if (isExpanded) updateFileInfo();
+  });
+
+  document.addEventListener("click", () => {
+    fileMenu.classList.add("hidden");
+    fileMenuBtn.setAttribute("aria-expanded", "false");
+  });
+
+  fileMenu.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") e.stopPropagation(); 
+  });
+
+  document.getElementById("menuNew").addEventListener("click", newFile);
+  document.getElementById("menuOpen").addEventListener("click", openFile);
+  document.getElementById("menuSave").addEventListener("click", saveFile);
+  document.getElementById("menuSaveAs").addEventListener("click", saveAsFile);
+  document.getElementById("menuDir").addEventListener("click", async () => {
+    if (!hasFSAccess || !("showDirectoryPicker" in window)) return;
+    try {
+      await establishDirectoryIfPossible();
+    } catch (err) {
+      await showError("Could not set working directory", err);
+    }
+  });
+  document.getElementById("menuWordCount").addEventListener("click", countWords);
+
+  moveBtn.addEventListener("click", toggleParentBlockSelection);
+  document.getElementById("copyAllBtn").addEventListener("click", copyAll);
+
+  // -------- Events --------
+  editor.addEventListener("input", () => {
+    if (selectedBlock) return; // Normally prevented by move mode block, but just in case
+    setDirty(true);
+  });
+
+  // Strict Move Mode constraints on mouse interaction
+  editor.addEventListener("mousedown", e => {
+    if (selectedBlock) {
+      e.preventDefault();
+      editor.focus();
+    }
+  });
+
+  filenameInput.addEventListener("focus", () => {
+    filenameInput.value = getFilename();
+    filenameInput.select();
+  });
+
+  filenameInput.addEventListener("input", () => {
+    filenameInput.dataset.baseName = filenameInput.value.replace(/\*+$/, "");
+    setDirty(true);
+  });
+
+  filenameInput.addEventListener("blur", () => {
+    setFilename(filenameInput.value || "notsaved");
+  });
+
+  document.addEventListener("keydown", e => {
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+
+    // Deletion Undo Shortcut
+    if (document.activeElement === editor && mod && key === "z") {
+      e.preventDefault();
+      performDeleteUndo();
+      return;
+    }
+
+    // Copy All Custom Shortcut (Overrides default Select All)
+    if (mod && key === "a") {
+      e.preventDefault();
+      copyAll();
+      return;
+    }
+
+    // Move Mode strictly controls keydown behavior when active
+    if (document.activeElement === editor && selectedBlock) {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        moveSelectedBlock(e.key === "ArrowUp" ? "up" : "down");
+        return;
+      }
+      if (e.key === "Enter" || (mod && key === "/")) {
+        e.preventDefault();
+        clearSelectedBlock();
+        showMessage("");
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        indentCurrentLine(e.shiftKey ? "out" : "in");
+        return;
+      }
+      // Block all other interactions in Move Mode
+      e.preventDefault();
+      return;
+    }
+
+    if (document.activeElement === editor && mod && key === "/") {
+      e.preventDefault();
+      toggleParentBlockSelection();
+      return;
+    }
+
+    if (document.activeElement === editor && e.key === "Tab") {
+      e.preventDefault();
+      indentCurrentLine(e.shiftKey ? "out" : "in");
+      return;
+    }
+
+    if (document.activeElement === editor && e.key === "Enter") {
+      e.preventDefault();
+      insertNewLineWithSameIndent();
+      return;
+    }
+
+    if (!mod) return;
+    
+    if (key === "s") {
+      e.preventDefault();
+      if (e.shiftKey) saveAsFile();
+      else saveFile();
+    } else if (key === "o") {
+      e.preventDefault();
+      openFile();
+    } else if (key === "n") {
+      e.preventDefault();
+      newFile();
+    }
+  });
+
+  window.addEventListener("beforeunload", e => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
+  // -------- Startup --------
+  setFilename("notsaved");
+  setDirty(false);
+  restoreWorkingDirectory();
+
+  if (!hasFSAccess) {
+    flashFallback();
+    document.getElementById("menuDir").style.display = "none";
+  }
+
+  editor.focus();
+})();
+</script>
+</body>
+</html>
